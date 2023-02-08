@@ -3,11 +3,13 @@ package main
 import (
 	"data-inteprenter/entity"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/gorilla/mux"
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 var (
@@ -31,7 +33,7 @@ func getData(w http.ResponseWriter, r *http.Request) {
 
 	originFlatten = Flatten(data.OriginData)
 	ParsingFormat := data.ParsingFormat
-	targetData = compareParsingFormat(ParsingFormat)
+	targetData = compareData(ParsingFormat)
 
 	object, err := json.Marshal(targetData)
 	if err != nil {
@@ -60,25 +62,41 @@ func Flatten(m map[string]interface{}) map[string]interface{} {
 	return o
 }
 
-func compareParsingFormat(f []entity.Format) map[string]interface{} {
+func compareData(f []entity.Format) map[string]interface{} {
 	par := make(map[string]interface{})
 
 	for _, parV := range f {
 		for key, value := range originFlatten {
 			if key == parV.Origin {
 				par[parV.Target] = value
-				//fmt.Println("Target  match", key, value, parV.Origin)
-
+			}
+			//else {
+			//	fmt.Println("Target doesn't match", key, value, parV.Origin)
+			//}
+			if address, err := matchFormat(&parV.Format, key) {
+				fmt.Println("== Address:", address)
+				par[parV.Target] = address
 			} else {
-				//fmt.Println("Target doesn't match", key, value, parV.Origin)
+				fmt.Println("alamat kosong")
 			}
 		}
+
 	}
 
 	return par
 }
 
-func decodeFormat()
+func matchFormat(pattern *string, format ...string) (string, error) {
+	if *pattern == "" {
+		return "", errors.New("No Format Detected")
+	}
+
+	if strings.Contains(*pattern, format[0]) {
+		*pattern = strings.ReplaceAll(strings.Replace(*pattern, format[0], format[1], -1), "$", "")
+	}
+
+	return *pattern, nil
+}
 
 func main() {
 
