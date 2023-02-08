@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
 var (
@@ -38,9 +39,10 @@ func getData(w http.ResponseWriter, r *http.Request) {
 	object, err := json.Marshal(targetData)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Println("Error Marshal Response")
+		fmt.Printf("Error Marshal Response %s", err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(object)
 
@@ -70,15 +72,14 @@ func compareData(f []entity.Format) map[string]interface{} {
 			if key == parV.Origin {
 				par[parV.Target] = value
 			}
-			//else {
-			//	fmt.Println("Target doesn't match", key, value, parV.Origin)
-			//}
-			if address, err := matchFormat(&parV.Format, key) {
-				fmt.Println("== Address:", address)
-				par[parV.Target] = address
+
+			if address, err := matchFormat(&parV.Format, key, fmt.Sprint(value)); err != nil {
+				//fmt.Println("error : ", err)
 			} else {
-				fmt.Println("alamat kosong")
+				//fmt.Println("== Address:", address)
+				par[parV.Target] = address
 			}
+
 		}
 
 	}
@@ -89,6 +90,11 @@ func compareData(f []entity.Format) map[string]interface{} {
 func matchFormat(pattern *string, format ...string) (string, error) {
 	if *pattern == "" {
 		return "", errors.New("No Format Detected")
+	}
+
+	date, err := time.Parse(*pattern, *pattern)
+	if err == nil && date.Year() != 0 {
+		return "", errors.New("This is Time Format")
 	}
 
 	if strings.Contains(*pattern, format[0]) {
