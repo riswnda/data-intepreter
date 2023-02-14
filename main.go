@@ -3,8 +3,8 @@ package main
 import (
 	"data-inteprenter/entity"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/araddon/dateparse"
 	"github.com/gorilla/mux"
 	"io"
 	"log"
@@ -14,14 +14,20 @@ import (
 )
 
 var (
-	data          entity.InputData
-	originFlatten map[string]interface{}
-	targetData    map[string]interface{}
+	data       entity.InputData
+	targetData map[string]any
+)
+
+type FormatType string
+
+const (
+	Empty  = FormatType("EMPTY")
+	Date   = FormatType("DATE")
+	String = FormatType("STRING")
 )
 
 func getData(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	var ()
+
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
 		if err == io.EOF {
@@ -31,10 +37,10 @@ func getData(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	defer r.Body.Close()
 
-	originFlatten = Flatten(data.OriginData)
 	ParsingFormat := data.ParsingFormat
-	targetData = compareData(ParsingFormat)
+	targetData = checkFormat(ParsingFormat)
 
 	object, err := json.Marshal(targetData)
 	if err != nil {
@@ -48,11 +54,11 @@ func getData(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func Flatten(m map[string]interface{}) map[string]interface{} {
-	o := make(map[string]interface{})
+func Flatten(m map[string]any) map[string]any {
+	o := make(map[string]any)
 	for k, v := range m {
 		switch child := v.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			nm := Flatten(child)
 			for nk, nv := range nm {
 				o[k+"."+nk] = nv
@@ -64,39 +70,53 @@ func Flatten(m map[string]interface{}) map[string]interface{} {
 	return o
 }
 
-func compareData(f []entity.Format) map[string]interface{} {
-	par := make(map[string]interface{})
+func checkFormat(f []entity.Format) map[string]any {
+	par := make(map[string]any)
+	originFlatten := Flatten(data.OriginData)
 
 	for _, parV := range f {
+		format, ft := getFormatType(parV.Format)
 		for key, value := range originFlatten {
-			if key == parV.Origin {
-				par[parV.Target] = value
-			}
+			if strings.Contains(key, parV.Origin) {
+				switch ft {
+				case Empty:
+					par[parV.Target] = value
+				case String:
+					address, err := addressFormat(&format, key, fmt.Sprintf("%s", value))
+					if err == nil {
+						par[parV.Target] = address
+					}
+				case Date:
+					t, err := dateparse.ParseAny(fmt.Sprint(value))
+					if err != nil {
+						log.Fatal(err)
+					}
+					par[parV.Target] = t.Format(format)
 
-			if address, err := matchFormat(&parV.Format, key, fmt.Sprint(value)); err != nil {
-				//fmt.Println("error : ", err)
-			} else {
-				//fmt.Println("== Address:", address)
-				par[parV.Target] = address
+				}
 			}
-
 		}
-
 	}
-
 	return par
 }
 
-func matchFormat(pattern *string, format ...string) (string, error) {
-	if *pattern == "" {
-		return "", errors.New("No Format Detected")
+func getFormatType(f string) (format string, formatType FormatType) {
+	// Conditional to check empty format
+	if len(f) <= 0 {
+		return f, Empty
 	}
-
-	date, err := time.Parse(*pattern, *pattern)
-	if err == nil && date.Year() != 0 {
-		return "", errors.New("This is Time Format")
+	// Conditional to check date format
+	dateFormat, err := time.Parse(f, f)
+	if err == nil {
+		if !dateFormat.IsZero() && dateFormat.Year() != 0 {
+			return f, Date
+		}
 	}
+	// If none of format match with 2 conditional above, return format string
+	return f, String
+}
 
+func addressFormat(pattern *string, format ...string) (string, error) {
 	if strings.Contains(*pattern, format[0]) {
 		*pattern = strings.ReplaceAll(strings.Replace(*pattern, format[0], format[1], -1), "$", "")
 	}
