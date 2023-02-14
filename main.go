@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -62,6 +63,10 @@ func Flatten(m map[string]any) map[string]any {
 			nm := Flatten(child)
 			for nk, nv := range nm {
 				o[k+"."+nk] = nv
+			}
+		case []interface{}:
+			for i := 0; i < len(child); i++ {
+				o[k+"."+strconv.Itoa(i)] = child[i]
 			}
 		default:
 			o[k] = v
